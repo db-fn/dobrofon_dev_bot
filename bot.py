@@ -46,8 +46,8 @@ async def get_health(message: Message):
                     data = await response.json()
                     services = format_status(data.get('services', {}))
                     containers = format_status(data.get('containers', {}))
-                    diskspace = format_status(data.get('diskspace', {}))
-                    text = f"\n<b>prod\n<b>Services:</b>\n{services}\n" + \
+                    diskspace = data.get('diskspace', {})
+                    text = f"\n<b>prod</b>\n<b>Services:</b>\n{services}\n" + \
                            f"<b>Containers:</b>\n{containers}" + \
                            f"<b>Diskspace:</b>\n{diskspace}"
                     await message.reply(text, parse_mode=ParseMode.HTML)
