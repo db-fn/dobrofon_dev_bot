@@ -54,11 +54,11 @@ async def get_health(message: Message):
 
                         prod_services = format_status(prod_data.get('services', {}))
                         prod_containers = format_status(prod_data.get('containers', {}))
-                        prod_diskspace = format_status(prod_data.get('diskspace', {}))
+                        prod_diskspace = prod_data.get('diskspace', {})
 
                         services_services = format_status(services_data.get('services', {}))
                         services_containers = format_status(services_data.get('containers', {}))
-                        services_diskspace = format_status(services_data.get('diskspace', {}))
+                        services_diskspace = services_data.get('diskspace', {})
 
                         text = (
                             f"<b>Prod</b>\n<b>Services:</b>\n{prod_services}\n"
