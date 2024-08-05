@@ -61,10 +61,10 @@ async def get_health(message: Message):
                         services_diskspace = services_data.get('diskspace', {})
 
                         text = (
-                            f"<b>Prod</b>\n<b>Services:</b>\n{prod_services}\n"
+                            f"<b>Prod Server</b>\n<b>Services:</b>\n{prod_services}\n"
                             f"<b>Containers:</b>\n{prod_containers}\n"
                             f"<b>Diskspace:</b>\n{prod_diskspace}\n\n"
-                            f"<b>Services</b>\n<b>Services:</b>\n{services_services}\n"
+                            f"<b>Services Server</b>\n<b>Services:</b>\n{services_services}\n"
                             f"<b>Containers:</b>\n{services_containers}\n"
                             f"<b>Diskspace:</b>\n{services_diskspace}"
                         )
@@ -85,10 +85,10 @@ async def get_health(message: Message):
                         data = await response.json()
                         services = format_status(data.get('services', {}))
                         containers = format_status(data.get('containers', {}))
-                        diskspace = format_status(data.get('diskspace', {}))
+                        diskspace = data.get('diskspace', {})
 
                         text = (
-                            f"<b>{target.capitalize()}</b>\n"
+                            f"<b>{target.capitalize()} Server</b>\n"
                             f"<b>Services:</b>\n{services}\n"
                             f"<b>Containers:</b>\n{containers}\n"
                             f"<b>Diskspace:</b>\n{diskspace}"
