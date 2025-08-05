@@ -1,6 +1,13 @@
-version: '3.8'
-
 services:
+  healthcheck:
+    build:
+      context: ../go-health-checker-for-services
+      dockerfile: Dockerfile
+    container_name: healthcheck
+    ports:
+      - "8000:8000"
+    restart: always
+
   bot:
     build:
       context: .
@@ -10,4 +17,6 @@ services:
       - .env
     volumes:
       - .:/app
+    depends_on:
+      - healthcheck
     restart: always
