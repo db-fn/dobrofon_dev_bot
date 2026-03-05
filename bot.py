@@ -76,6 +76,37 @@ def format_status_line(status: dict) -> str:
     return " │ ".join(parts)
 
 
+def pct_indicator(pct_str: str) -> str:
+    try:
+        pct = int(str(pct_str).replace('%', '').strip())
+        if pct >= 90:
+            return '🔴'
+        if pct >= 80:
+            return '⚠️'
+        return '✅'
+    except Exception:
+        return ''
+
+
+def load_indicator(load_str: str) -> str:
+    try:
+        val = float(str(load_str).split()[0])
+        if val >= 4.0:
+            return '🔴'
+        if val >= 2.0:
+            return '⚠️'
+        return '✅'
+    except Exception:
+        return ''
+
+
+def disk_pct(disk_str: str) -> str:
+    for part in disk_str.split():
+        if part.endswith('%'):
+            return part
+    return ''
+
+
 def format_server_block(name: str, data: dict, command: str = "") -> str:
     services = data.get('services', {})
     containers = data.get('containers', {})
@@ -83,6 +114,8 @@ def format_server_block(name: str, data: dict, command: str = "") -> str:
     memory = data.get('memory', {})
     load = data.get('load', '')
     registry = data.get('registry', {})
+    connections = data.get('connections', None)
+    network = data.get('network', {})
 
     disk_compact = ' '.join(diskspace.split()[1:]) if diskspace else ''
 
@@ -98,20 +131,33 @@ def format_server_block(name: str, data: dict, command: str = "") -> str:
         lines.append(f"<b>Containers:</b> {format_status_line(containers)}")
 
     if disk_compact:
-        lines.append(f"💾 {disk_compact}")
+        dpct = disk_pct(diskspace)
+        disk_icon = pct_indicator(dpct) if dpct else '💾'
+        lines.append(f"{disk_icon} Disk: {disk_compact}")
 
-    if memory and load:
+    if memory:
         used = mb_to_gb(memory.get('used', '?'))
         total = mb_to_gb(memory.get('total', '?'))
         pct = memory.get('used_pct', '?')
-        lines.append(f"🧠 RAM: {used}/{total} ({pct}) │ Load: {load}")
-    elif memory:
-        used = mb_to_gb(memory.get('used', '?'))
-        total = mb_to_gb(memory.get('total', '?'))
-        pct = memory.get('used_pct', '?')
-        lines.append(f"🧠 RAM: {used}/{total} ({pct})")
+        ram_icon = pct_indicator(pct)
+        ram_line = f"{ram_icon} RAM: {used}/{total} ({pct})"
+        if load:
+            load_icon = load_indicator(load)
+            ram_line += f" │ {load_icon} Load: {load}"
+        lines.append(ram_line)
     elif load:
-        lines.append(f"📊 Load: {load}")
+        load_icon = load_indicator(load)
+        lines.append(f"{load_icon} Load: {load}")
+
+    if connections is not None:
+        conn_icon = '🔴' if connections > 1000 else ('⚠️' if connections > 500 else '✅')
+        lines.append(f"{conn_icon} Connections: {connections}")
+
+    if network:
+        rx = network.get('rx', '')
+        tx = network.get('tx', '')
+        if rx or tx:
+            lines.append(f"🌐 Net: ↓{rx} ↑{tx}")
 
     preview_count = data.get('preview_count', 0)
     if preview_count:
