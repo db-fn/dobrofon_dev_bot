@@ -90,17 +90,31 @@ async def get_health(message: Message):
     async with aiohttp.ClientSession() as session:
         try:
             if target is None:
-                # Request general info
-                async with session.get(PROD_URL) as prod_response, session.get(SERVICES_URL) as services_response:
-                    if prod_response.status == 200 and services_response.status == 200:
-                        prod_data = await prod_response.json()
-                        services_data = await services_response.json()
+                all_servers = [
+                    ("Prod", PROD_URL),
+                    ("Services", SERVICES_URL),
+                    ("Monitoring", MONITORING_URL),
+                    ("Staging", STAGING_URL),
+                ]
+                blocks = []
+                errors = []
+                for name, url in all_servers:
+                    if not url:
+                        continue
+                    try:
+                        async with session.get(url) as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                blocks.append(format_server_block(f"{name} Server", data))
+                            else:
+                                errors.append(f"{name}: HTTP {resp.status}")
+                    except Exception as e:
+                        errors.append(f"{name}: {e}")
 
-                        text = format_server_block("Prod Server", prod_data)
-                        text += "\n\n" + format_server_block("Services Server", services_data)
-                        await message.reply(text, parse_mode=ParseMode.HTML)
-                    else:
-                        await message.reply("Error: Unable to fetch health check information from one or both URLs.")
+                text = "\n\n".join(blocks)
+                if errors:
+                    text += "\n\n⚠️ Errors:\n" + "\n".join(errors)
+                await message.reply(text or "No servers configured.", parse_mode=ParseMode.HTML)
 
             else:
                 # Request specific info
