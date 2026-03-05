@@ -76,7 +76,7 @@ def format_status_line(status: dict) -> str:
     return " │ ".join(parts)
 
 
-def format_server_block(name: str, data: dict) -> str:
+def format_server_block(name: str, data: dict, command: str = "") -> str:
     services = data.get('services', {})
     containers = data.get('containers', {})
     diskspace = data.get('diskspace', '')
@@ -86,7 +86,10 @@ def format_server_block(name: str, data: dict) -> str:
 
     disk_compact = ' '.join(diskspace.split()[1:]) if diskspace else ''
 
-    lines = [f"🖥 <b>{name}</b>"]
+    title = f"🖥 <b>{name}</b>"
+    if command:
+        title += f" /{command}"
+    lines = [title]
 
     if services:
         lines.append(f"<b>Services:</b> {format_status_line(services)}")
@@ -123,14 +126,14 @@ def format_server_block(name: str, data: dict) -> str:
     return "\n".join(lines)
 
 
-async def fetch_server(session, name: str, url: str) -> str:
+async def fetch_server(session, name: str, url: str, command: str = "") -> str:
     if not url:
         return f"⚠️ {name}: not configured"
     try:
         async with session.get(url) as resp:
             if resp.status == 200:
                 data = await resp.json()
-                return format_server_block(f"{name} Server", data)
+                return format_server_block(f"{name} Server", data, command)
             return f"⚠️ {name}: HTTP {resp.status}"
     except Exception as e:
         return f"⚠️ {name}: {e}"
@@ -166,16 +169,16 @@ async def get_health(message: Message):
     target = command_args[0] if len(command_args) > 0 else None
 
     all_servers = [
-        ("Prod", PROD_URL),
-        ("Services", SERVICES_URL),
-        ("Monitoring", MONITORING_URL),
-        ("Staging", STAGING_URL),
+        ("Prod", PROD_URL, "prod"),
+        ("Services", SERVICES_URL, "services"),
+        ("Monitoring", MONITORING_URL, "monitoring"),
+        ("Staging", STAGING_URL, "staging"),
     ]
     async with aiohttp.ClientSession() as session:
         try:
             blocks = await asyncio.gather(*[
-                fetch_server(session, name, url)
-                for name, url in all_servers if url
+                fetch_server(session, name, url, command)
+                for name, url, command in all_servers if url
             ])
             await message.reply("\n\n".join(blocks) or "No servers configured.", parse_mode=ParseMode.HTML)
         except Exception as e:
