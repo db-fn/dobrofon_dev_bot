@@ -110,6 +110,10 @@ def format_server_block(name: str, data: dict) -> str:
     elif load:
         lines.append(f"📊 Load: {load}")
 
+    preview_count = data.get('preview_count', 0)
+    if preview_count:
+        lines.append(f"🔬 Preview envs: {preview_count} active")
+
     if registry and registry.get('total_repos', 0) > 0:
         repos = registry.get('repos', {})
         repo_lines = [f"  • {r}: {t} tag{'s' if t != 1 else ''}" for r, t in sorted(repos.items())]
