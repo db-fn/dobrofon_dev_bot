@@ -25,10 +25,10 @@ dp = Dispatcher()
 HELP_TEXT = (
     "Available commands:\n\n"
     "/health — all servers overview\n"
-    "/health prod — production server\n"
-    "/health services — services server (runners, registry, etc.)\n"
-    "/health monitoring — monitoring server\n"
-    "/health staging — staging server\n"
+    "/prod — production server\n"
+    "/services — services server (runners, registry, etc.)\n"
+    "/monitoring — monitoring server\n"
+    "/staging — staging server\n"
     "/help — show this message"
 )
 
@@ -108,61 +108,61 @@ def format_server_block(name: str, data: dict) -> str:
     return "\n".join(lines)
 
 
+async def fetch_server(session, name: str, url: str) -> str:
+    if not url:
+        return f"⚠️ {name}: not configured"
+    try:
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return format_server_block(f"{name} Server", data)
+            return f"⚠️ {name}: HTTP {resp.status}"
+    except Exception as e:
+        return f"⚠️ {name}: {e}"
+
+
+@dp.message(Command(commands=["prod"]))
+async def cmd_prod(message: Message):
+    async with aiohttp.ClientSession() as session:
+        await message.reply(await fetch_server(session, "Prod", PROD_URL), parse_mode=ParseMode.HTML)
+
+
+@dp.message(Command(commands=["services"]))
+async def cmd_services(message: Message):
+    async with aiohttp.ClientSession() as session:
+        await message.reply(await fetch_server(session, "Services", SERVICES_URL), parse_mode=ParseMode.HTML)
+
+
+@dp.message(Command(commands=["monitoring"]))
+async def cmd_monitoring(message: Message):
+    async with aiohttp.ClientSession() as session:
+        await message.reply(await fetch_server(session, "Monitoring", MONITORING_URL), parse_mode=ParseMode.HTML)
+
+
+@dp.message(Command(commands=["staging"]))
+async def cmd_staging(message: Message):
+    async with aiohttp.ClientSession() as session:
+        await message.reply(await fetch_server(session, "Staging", STAGING_URL), parse_mode=ParseMode.HTML)
+
+
 @dp.message(Command(commands=["health"]))
 async def get_health(message: Message):
     command_args = message.text.split()[1:]
     target = command_args[0] if len(command_args) > 0 else None
 
+    all_servers = [
+        ("Prod", PROD_URL),
+        ("Services", SERVICES_URL),
+        ("Monitoring", MONITORING_URL),
+        ("Staging", STAGING_URL),
+    ]
     async with aiohttp.ClientSession() as session:
         try:
-            if target is None:
-                all_servers = [
-                    ("Prod", PROD_URL),
-                    ("Services", SERVICES_URL),
-                    ("Monitoring", MONITORING_URL),
-                    ("Staging", STAGING_URL),
-                ]
-                blocks = []
-                errors = []
-                for name, url in all_servers:
-                    if not url:
-                        continue
-                    try:
-                        async with session.get(url) as resp:
-                            if resp.status == 200:
-                                data = await resp.json()
-                                blocks.append(format_server_block(f"{name} Server", data))
-                            else:
-                                errors.append(f"{name}: HTTP {resp.status}")
-                    except Exception as e:
-                        errors.append(f"{name}: {e}")
-
-                text = "\n\n".join(blocks)
-                if errors:
-                    text += "\n\n⚠️ Errors:\n" + "\n".join(errors)
-                await message.reply(text or "No servers configured.", parse_mode=ParseMode.HTML)
-
-            else:
-                # Request specific info
-                url_map = {
-                    "prod": PROD_URL,
-                    "services": SERVICES_URL,
-                    "monitoring": MONITORING_URL,
-                    "staging": STAGING_URL,
-                }
-                url = url_map.get(target)
-
-                if not url:
-                    await message.reply("Invalid target. Use /health, /health prod, /health services, /health monitoring or /health staging.")
-                    return
-
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        text = format_server_block(f"{target.capitalize()} Server", data)
-                        await message.reply(text, parse_mode=ParseMode.HTML)
-                    else:
-                        await message.reply(f"Error: {response.status}")
+            blocks = await asyncio.gather(*[
+                fetch_server(session, name, url)
+                for name, url in all_servers if url
+            ])
+            await message.reply("\n\n".join(blocks) or "No servers configured.", parse_mode=ParseMode.HTML)
         except Exception as e:
             await message.reply(f"Error: {e}")
 
