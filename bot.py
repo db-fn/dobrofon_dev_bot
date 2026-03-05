@@ -47,6 +47,14 @@ async def command_start_handler(message: Message):
 async def command_help_handler(message: Message):
     await message.reply(HELP_TEXT)
 
+def mb_to_gb(mb_str: str) -> str:
+    try:
+        mb = int(mb_str.replace("MB", ""))
+        return f"{mb / 1024:.1f}GB"
+    except Exception:
+        return mb_str
+
+
 def shorten_name(name: str) -> str:
     name = name.removesuffix(".service")
     replacements = {
@@ -90,12 +98,15 @@ def format_server_block(name: str, data: dict) -> str:
         lines.append(f"💾 {disk_compact}")
 
     if memory and load:
-        used = memory.get('used', '?')
-        total = memory.get('total', '?')
+        used = mb_to_gb(memory.get('used', '?'))
+        total = mb_to_gb(memory.get('total', '?'))
         pct = memory.get('used_pct', '?')
         lines.append(f"🧠 RAM: {used}/{total} ({pct}) │ Load: {load}")
     elif memory:
-        lines.append(f"🧠 RAM: {memory.get('used','?')}/{memory.get('total','?')} ({memory.get('used_pct','?')})")
+        used = mb_to_gb(memory.get('used', '?'))
+        total = mb_to_gb(memory.get('total', '?'))
+        pct = memory.get('used_pct', '?')
+        lines.append(f"🧠 RAM: {used}/{total} ({pct})")
     elif load:
         lines.append(f"📊 Load: {load}")
 
