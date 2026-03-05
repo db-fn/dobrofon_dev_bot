@@ -22,15 +22,30 @@ logging.basicConfig(level=logging.INFO)
 
 dp = Dispatcher()
 
+HELP_TEXT = (
+    "Available commands:\n\n"
+    "/health — all servers overview\n"
+    "/health prod — production server\n"
+    "/health services — services server (runners, registry, etc.)\n"
+    "/health monitoring — monitoring server\n"
+    "/health staging — staging server\n"
+    "/help — show this message"
+)
+
+
 @dp.message(CommandStart())
 async def command_start_handler(message: Message):
     text = (
-        f"Assalamu aleikum!\n{html.bold(message.from_user.full_name)}\n"
-        "I'm dobrofon_dev_bot!\nPowered by @ibn_petr.\n\n"
-        "I can help you with getting the latest health-check info from your server.\n\n"
-        "Just type /health and I'll show you the health-check info."
+        f"Assalamu aleikum! {html.bold(message.from_user.full_name)}\n"
+        "I'm dobrofon_dev_bot!\n\n"
+        + HELP_TEXT
     )
     await message.reply(text)
+
+
+@dp.message(Command(commands=["help"]))
+async def command_help_handler(message: Message):
+    await message.reply(HELP_TEXT)
 
 def format_status(status: dict) -> str:
     formatted = ""
@@ -96,6 +111,7 @@ async def get_health(message: Message):
                         diskspace = data.get('diskspace', '')
                         memory = data.get('memory', {})
                         load = data.get('load', '')
+                        registry = data.get('registry', {})
 
                         text = f"<b>{target.capitalize()} Server</b>\n"
                         text += f"<b>Services:</b>\n{services}\n"
@@ -107,7 +123,12 @@ async def get_health(message: Message):
                             text += f"Used: {memory.get('used', '?')} / {memory.get('total', '?')} ({memory.get('used_pct', '?')})\n"
                             text += f"Available: {memory.get('available', '?')}\n"
                         if load:
-                            text += f"\n<b>Load avg (1m 5m 15m):</b>\n{load}"
+                            text += f"\n<b>Load avg (1m 5m 15m):</b>\n{load}\n"
+                        if registry and registry.get('total_repos', 0) > 0:
+                            text += f"\n<b>Registry:</b>\n"
+                            text += f"Repos: {registry.get('total_repos', 0)}, Tags: {registry.get('total_tags', 0)}\n"
+                            for repo, tag_count in sorted(registry.get('repos', {}).items()):
+                                text += f"  {repo}: {tag_count} tags\n"
 
                         await message.reply(text.strip(), parse_mode=ParseMode.HTML)
                     else:
