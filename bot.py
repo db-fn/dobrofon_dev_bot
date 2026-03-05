@@ -88,12 +88,12 @@ def pct_indicator(pct_str: str) -> str:
         return ''
 
 
-def load_indicator(load_str: str) -> str:
+def cpu_indicator(cpu_str: str) -> str:
     try:
-        val = float(str(load_str).split()[0])
-        if val >= 4.0:
+        val = int(str(cpu_str).replace('%', '').strip())
+        if val >= 90:
             return '🔴'
-        if val >= 2.0:
+        if val >= 70:
             return '⚠️'
         return '✅'
     except Exception:
@@ -112,7 +112,7 @@ def format_server_block(name: str, data: dict, command: str = "") -> str:
     containers = data.get('containers', {})
     diskspace = data.get('diskspace', '')
     memory = data.get('memory', {})
-    load = data.get('load', '')
+    load = data.get('cpu', data.get('load', ''))
     registry = data.get('registry', {})
     connections = data.get('connections', None)
     network = data.get('network', {})
@@ -143,8 +143,9 @@ def format_server_block(name: str, data: dict, command: str = "") -> str:
         lines.append(f"{ram_icon} RAM: {used}/{total} ({pct})")
 
     if load:
-        load_icon = load_indicator(load)
-        lines.append(f"{load_icon} Load: {load}")
+        load_icon = cpu_indicator(load)
+        label = 'CPU' if data.get('cpu') else 'Load'
+        lines.append(f"{load_icon} {label}: {load}")
 
     if connections is not None:
         conn_icon = '🔴' if connections > 1000 else ('⚠️' if connections > 500 else '✅')
