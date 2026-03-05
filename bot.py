@@ -14,6 +14,8 @@ from aiogram.types import Message
 TOKEN = getenv('TELEGRAM_API_TOKEN', 'YOUR_API_TOKEN')
 PROD_URL = getenv('PROD_URL', 'YOUR_URL')
 SERVICES_URL = getenv('SERVICES_URL', 'YOUR_SERVICES_URL')
+MONITORING_URL = getenv('MONITORING_URL', '')
+STAGING_URL = getenv('STAGING_URL', '')
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -74,10 +76,16 @@ async def get_health(message: Message):
 
             else:
                 # Request specific info
-                url = PROD_URL if target == "prod" else SERVICES_URL if target == "services" else None
+                url_map = {
+                    "prod": PROD_URL,
+                    "services": SERVICES_URL,
+                    "monitoring": MONITORING_URL,
+                    "staging": STAGING_URL,
+                }
+                url = url_map.get(target)
 
                 if url is None:
-                    await message.reply("Invalid target. Use /health, /health prod or /health services.")
+                    await message.reply("Invalid target. Use /health, /health prod, /health services, /health monitoring or /health staging.")
                     return
 
                 async with session.get(url) as response:
@@ -85,15 +93,23 @@ async def get_health(message: Message):
                         data = await response.json()
                         services = format_status(data.get('services', {}))
                         containers = format_status(data.get('containers', {}))
-                        diskspace = data.get('diskspace', {})
+                        diskspace = data.get('diskspace', '')
+                        memory = data.get('memory', {})
+                        load = data.get('load', '')
 
-                        text = (
-                            f"<b>{target.capitalize()} Server</b>\n"
-                            f"<b>Services:</b>\n{services}\n"
-                            f"<b>Containers:</b>\n{containers}\n"
-                            f"<b>Diskspace:</b>\n{diskspace}"
-                        )
-                        await message.reply(text, parse_mode=ParseMode.HTML)
+                        text = f"<b>{target.capitalize()} Server</b>\n"
+                        text += f"<b>Services:</b>\n{services}\n"
+                        if containers.strip():
+                            text += f"<b>Containers:</b>\n{containers}\n"
+                        text += f"<b>Diskspace:</b>\n{diskspace}\n"
+                        if memory:
+                            text += f"\n<b>Memory:</b>\n"
+                            text += f"Used: {memory.get('used', '?')} / {memory.get('total', '?')} ({memory.get('used_pct', '?')})\n"
+                            text += f"Available: {memory.get('available', '?')}\n"
+                        if load:
+                            text += f"\n<b>Load avg (1m 5m 15m):</b>\n{load}"
+
+                        await message.reply(text.strip(), parse_mode=ParseMode.HTML)
                     else:
                         await message.reply(f"Error: {response.status}")
         except Exception as e:
