@@ -47,39 +47,65 @@ async def command_start_handler(message: Message):
 async def command_help_handler(message: Message):
     await message.reply(HELP_TEXT)
 
-def format_status(status: dict) -> str:
-    formatted = ""
-    for service, state in status.items():
+def shorten_name(name: str) -> str:
+    name = name.removesuffix(".service")
+    replacements = {
+        "github-actions-runner": "gh-runner",
+        "celery-production": "celery",
+        "celerybeat-production": "celerybeat",
+        "dobrofon-production": "dobrofon",
+        "admin-frontend-production-app": "admin-frontend",
+        "redis-production": "redis",
+    }
+    return replacements.get(name, name)
+
+
+def format_status_line(status: dict) -> str:
+    parts = []
+    for name, state in status.items():
         symbol = "✅" if state == "ok" else "❌"
-        formatted += f"{service}: {symbol}\n"
-    return formatted
+        parts.append(f"{shorten_name(name)} {symbol}")
+    return " │ ".join(parts)
 
 
 def format_server_block(name: str, data: dict) -> str:
-    services = format_status(data.get('services', {}))
-    containers = format_status(data.get('containers', {}))
+    services = data.get('services', {})
+    containers = data.get('containers', {})
     diskspace = data.get('diskspace', '')
     memory = data.get('memory', {})
     load = data.get('load', '')
     registry = data.get('registry', {})
 
-    text = f"<b>{name}</b>\n"
-    text += f"<b>Services:</b>\n{services}\n"
-    if containers.strip():
-        text += f"<b>Containers:</b>\n{containers}\n"
-    text += f"<b>Diskspace:</b>\n{diskspace}\n"
-    if memory:
-        text += f"\n<b>Memory:</b>\n"
-        text += f"Used: {memory.get('used', '?')} / {memory.get('total', '?')} ({memory.get('used_pct', '?')})\n"
-        text += f"Available: {memory.get('available', '?')}\n"
-    if load:
-        text += f"\n<b>Load avg (1m 5m 15m):</b>\n{load}\n"
+    disk_compact = ' '.join(diskspace.split()[1:]) if diskspace else ''
+
+    lines = [f"🖥 <b>{name}</b>"]
+
+    if services:
+        lines.append(f"<b>Services:</b> {format_status_line(services)}")
+
+    if containers:
+        lines.append(f"<b>Containers:</b> {format_status_line(containers)}")
+
+    if disk_compact:
+        lines.append(f"💾 {disk_compact}")
+
+    if memory and load:
+        used = memory.get('used', '?')
+        total = memory.get('total', '?')
+        pct = memory.get('used_pct', '?')
+        lines.append(f"🧠 RAM: {used}/{total} ({pct}) │ Load: {load}")
+    elif memory:
+        lines.append(f"🧠 RAM: {memory.get('used','?')}/{memory.get('total','?')} ({memory.get('used_pct','?')})")
+    elif load:
+        lines.append(f"📊 Load: {load}")
+
     if registry and registry.get('total_repos', 0) > 0:
-        text += f"\n<b>Registry:</b>\n"
-        text += f"Repos: {registry.get('total_repos', 0)}, Tags: {registry.get('total_tags', 0)}\n"
-        for repo, tag_count in sorted(registry.get('repos', {}).items()):
-            text += f"  {repo}: {tag_count} tags\n"
-    return text.strip()
+        repos = registry.get('repos', {})
+        repo_lines = [f"  • {r}: {t} tag{'s' if t != 1 else ''}" for r, t in sorted(repos.items())]
+        lines.append(f"📦 Registry: {registry['total_repos']} repos, {registry['total_tags']} tags")
+        lines.extend(repo_lines)
+
+    return "\n".join(lines)
 
 
 @dp.message(Command(commands=["health"]))
