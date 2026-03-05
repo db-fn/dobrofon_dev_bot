@@ -140,12 +140,9 @@ def format_server_block(name: str, data: dict, command: str = "") -> str:
         total = mb_to_gb(memory.get('total', '?'))
         pct = memory.get('used_pct', '?')
         ram_icon = pct_indicator(pct)
-        ram_line = f"{ram_icon} RAM: {used}/{total} ({pct})"
-        if load:
-            load_icon = load_indicator(load)
-            ram_line += f" │ {load_icon} Load: {load}"
-        lines.append(ram_line)
-    elif load:
+        lines.append(f"{ram_icon} RAM: {used}/{total} ({pct})")
+
+    if load:
         load_icon = load_indicator(load)
         lines.append(f"{load_icon} Load: {load}")
 
