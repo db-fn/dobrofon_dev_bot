@@ -55,6 +55,33 @@ def format_status(status: dict) -> str:
     return formatted
 
 
+def format_server_block(name: str, data: dict) -> str:
+    services = format_status(data.get('services', {}))
+    containers = format_status(data.get('containers', {}))
+    diskspace = data.get('diskspace', '')
+    memory = data.get('memory', {})
+    load = data.get('load', '')
+    registry = data.get('registry', {})
+
+    text = f"<b>{name}</b>\n"
+    text += f"<b>Services:</b>\n{services}\n"
+    if containers.strip():
+        text += f"<b>Containers:</b>\n{containers}\n"
+    text += f"<b>Diskspace:</b>\n{diskspace}\n"
+    if memory:
+        text += f"\n<b>Memory:</b>\n"
+        text += f"Used: {memory.get('used', '?')} / {memory.get('total', '?')} ({memory.get('used_pct', '?')})\n"
+        text += f"Available: {memory.get('available', '?')}\n"
+    if load:
+        text += f"\n<b>Load avg (1m 5m 15m):</b>\n{load}\n"
+    if registry and registry.get('total_repos', 0) > 0:
+        text += f"\n<b>Registry:</b>\n"
+        text += f"Repos: {registry.get('total_repos', 0)}, Tags: {registry.get('total_tags', 0)}\n"
+        for repo, tag_count in sorted(registry.get('repos', {}).items()):
+            text += f"  {repo}: {tag_count} tags\n"
+    return text.strip()
+
+
 @dp.message(Command(commands=["health"]))
 async def get_health(message: Message):
     command_args = message.text.split()[1:]
@@ -69,22 +96,8 @@ async def get_health(message: Message):
                         prod_data = await prod_response.json()
                         services_data = await services_response.json()
 
-                        prod_services = format_status(prod_data.get('services', {}))
-                        prod_containers = format_status(prod_data.get('containers', {}))
-                        prod_diskspace = prod_data.get('diskspace', {})
-
-                        services_services = format_status(services_data.get('services', {}))
-                        services_containers = format_status(services_data.get('containers', {}))
-                        services_diskspace = services_data.get('diskspace', {})
-
-                        text = (
-                            f"<b>Prod Server</b>\n<b>Services:</b>\n{prod_services}\n"
-                            f"<b>Containers:</b>\n{prod_containers}\n"
-                            f"<b>Diskspace:</b>\n{prod_diskspace}\n\n"
-                            f"<b>Services Server</b>\n<b>Services:</b>\n{services_services}\n"
-                            f"<b>Containers:</b>\n{services_containers}\n"
-                            f"<b>Diskspace:</b>\n{services_diskspace}"
-                        )
+                        text = format_server_block("Prod Server", prod_data)
+                        text += "\n\n" + format_server_block("Services Server", services_data)
                         await message.reply(text, parse_mode=ParseMode.HTML)
                     else:
                         await message.reply("Error: Unable to fetch health check information from one or both URLs.")
@@ -106,31 +119,8 @@ async def get_health(message: Message):
                 async with session.get(url) as response:
                     if response.status == 200:
                         data = await response.json()
-                        services = format_status(data.get('services', {}))
-                        containers = format_status(data.get('containers', {}))
-                        diskspace = data.get('diskspace', '')
-                        memory = data.get('memory', {})
-                        load = data.get('load', '')
-                        registry = data.get('registry', {})
-
-                        text = f"<b>{target.capitalize()} Server</b>\n"
-                        text += f"<b>Services:</b>\n{services}\n"
-                        if containers.strip():
-                            text += f"<b>Containers:</b>\n{containers}\n"
-                        text += f"<b>Diskspace:</b>\n{diskspace}\n"
-                        if memory:
-                            text += f"\n<b>Memory:</b>\n"
-                            text += f"Used: {memory.get('used', '?')} / {memory.get('total', '?')} ({memory.get('used_pct', '?')})\n"
-                            text += f"Available: {memory.get('available', '?')}\n"
-                        if load:
-                            text += f"\n<b>Load avg (1m 5m 15m):</b>\n{load}\n"
-                        if registry and registry.get('total_repos', 0) > 0:
-                            text += f"\n<b>Registry:</b>\n"
-                            text += f"Repos: {registry.get('total_repos', 0)}, Tags: {registry.get('total_tags', 0)}\n"
-                            for repo, tag_count in sorted(registry.get('repos', {}).items()):
-                                text += f"  {repo}: {tag_count} tags\n"
-
-                        await message.reply(text.strip(), parse_mode=ParseMode.HTML)
+                        text = format_server_block(f"{target.capitalize()} Server", data)
+                        await message.reply(text, parse_mode=ParseMode.HTML)
                     else:
                         await message.reply(f"Error: {response.status}")
         except Exception as e:
