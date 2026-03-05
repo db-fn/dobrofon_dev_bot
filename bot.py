@@ -84,7 +84,7 @@ async def get_health(message: Message):
                 }
                 url = url_map.get(target)
 
-                if url is None:
+                if not url:
                     await message.reply("Invalid target. Use /health, /health prod, /health services, /health monitoring or /health staging.")
                     return
 
