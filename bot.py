@@ -73,7 +73,7 @@ def format_status_line(status: dict) -> str:
     for name, state in status.items():
         symbol = "✅" if state == "ok" else "❌"
         parts.append(f"{shorten_name(name)} {symbol}")
-    return " │ ".join(parts)
+    return "\n".join(parts)
 
 
 def pct_indicator(pct_str: str) -> str:
@@ -125,10 +125,12 @@ def format_server_block(name: str, data: dict, command: str = "") -> str:
     lines = [title]
 
     if services:
-        lines.append(f"<b>Services:</b> {format_status_line(services)}")
+        lines.append(f"<b>Services:</b>")
+        lines.append(format_status_line(services))
 
     if containers:
-        lines.append(f"<b>Containers:</b> {format_status_line(containers)}")
+        lines.append(f"<b>Containers:</b>")
+        lines.append(format_status_line(containers))
 
     if disk_compact:
         dpct = disk_pct(diskspace)
