@@ -17,6 +17,17 @@ SERVICES_URL = getenv('SERVICES_URL', 'YOUR_SERVICES_URL')
 MONITORING_URL = getenv('MONITORING_URL', '')
 STAGING_URL = getenv('STAGING_URL', '')
 
+PROD_TOKEN = getenv('PROD_TOKEN', '')
+MONITORING_TOKEN = getenv('MONITORING_TOKEN', '')
+STAGING_TOKEN = getenv('STAGING_TOKEN', '')
+
+
+def _with_token(url: str, token: str) -> str:
+    if not token or not url:
+        return url
+    sep = '&' if '?' in url else '?'
+    return f"{url}{sep}token={token}"
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
@@ -188,7 +199,7 @@ async def fetch_server(session, name: str, url: str, command: str = "") -> str:
 @dp.message(Command(commands=["prod"]))
 async def cmd_prod(message: Message):
     async with aiohttp.ClientSession() as session:
-        await message.reply(await fetch_server(session, "Prod", PROD_URL), parse_mode=ParseMode.HTML)
+        await message.reply(await fetch_server(session, "Prod", _with_token(PROD_URL, PROD_TOKEN)), parse_mode=ParseMode.HTML)
 
 
 @dp.message(Command(commands=["services"]))
@@ -200,25 +211,22 @@ async def cmd_services(message: Message):
 @dp.message(Command(commands=["monitoring"]))
 async def cmd_monitoring(message: Message):
     async with aiohttp.ClientSession() as session:
-        await message.reply(await fetch_server(session, "Monitoring", MONITORING_URL), parse_mode=ParseMode.HTML)
+        await message.reply(await fetch_server(session, "Monitoring", _with_token(MONITORING_URL, MONITORING_TOKEN)), parse_mode=ParseMode.HTML)
 
 
 @dp.message(Command(commands=["staging"]))
 async def cmd_staging(message: Message):
     async with aiohttp.ClientSession() as session:
-        await message.reply(await fetch_server(session, "Staging", STAGING_URL), parse_mode=ParseMode.HTML)
+        await message.reply(await fetch_server(session, "Staging", _with_token(STAGING_URL, STAGING_TOKEN)), parse_mode=ParseMode.HTML)
 
 
 @dp.message(Command(commands=["health"]))
 async def get_health(message: Message):
-    command_args = message.text.split()[1:]
-    target = command_args[0] if len(command_args) > 0 else None
-
     all_servers = [
-        ("Prod", PROD_URL, "prod"),
+        ("Prod", _with_token(PROD_URL, PROD_TOKEN), "prod"),
         ("Services", SERVICES_URL, "services"),
-        ("Monitoring", MONITORING_URL, "monitoring"),
-        ("Staging", STAGING_URL, "staging"),
+        ("Monitoring", _with_token(MONITORING_URL, MONITORING_TOKEN), "monitoring"),
+        ("Staging", _with_token(STAGING_URL, STAGING_TOKEN), "staging"),
     ]
     async with aiohttp.ClientSession() as session:
         try:
