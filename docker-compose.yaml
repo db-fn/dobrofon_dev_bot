@@ -7,12 +7,26 @@ services:
     ports:
       - "8000:8000"
     restart: always
+    privileged: true
+    pid: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      REGISTRY_URL: http://registry:5000
+      REGISTRY_USER: dobrofon
+      REGISTRY_PASS: ${REGISTRY_PASS}
+    networks:
+      - default
+      - registry_network
 
   bot:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: dobrofon_dev_bot
+    extra_hosts:
+      # часть подсетей Telegram недоступна с этого сервера, 149.154.167.220 проходит
+      - "api.telegram.org:149.154.167.220"
     env_file:
       - .env
     volumes:
@@ -20,3 +34,8 @@ services:
     depends_on:
       - healthcheck
     restart: always
+
+networks:
+  registry_network:
+    external: true
+    name: registry_registry_network
