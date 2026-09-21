@@ -24,7 +24,13 @@ PROD_TOKEN = getenv('PROD_TOKEN', '')
 MONITORING_TOKEN = getenv('MONITORING_TOKEN', '')
 STAGING_TOKEN = getenv('STAGING_TOKEN', '')
 
+FUNDRAISERS_URL = getenv('FUNDRAISERS_URL', '')
+FUNDRAISERS_TOKEN = getenv('FUNDRAISERS_TOKEN', '')
+
+ANALYTICS_URL = getenv('ANALYTICS_URL', '')
+
 ALERT_CHAT_ID = getenv('ALERT_CHAT_ID', '')
+OWNER_ID = int(getenv('OWNER_ID', '0') or 0)
 SNAPSHOTS_FILE = getenv('SNAPSHOTS_FILE', '/home/dobrofon/alarm-bot/snapshots.jsonl')
 
 
@@ -34,6 +40,12 @@ def _with_token(url: str, token: str) -> str:
     sep = '&' if '?' in url else '?'
     return f"{url}{sep}token={token}"
 
+
+def is_owner(message: Message) -> bool:
+    return bool(OWNER_ID) and message.from_user is not None and message.from_user.id == OWNER_ID
+
+
+NOT_ALLOWED = 'Эта команда доступна только владельцу бота.'
 
 dp = Dispatcher()
 
@@ -46,7 +58,9 @@ HELP_TEXT = (
     "/services — services server (runners, registry, etc.)\n"
     "/monitoring — monitoring server\n"
     "/staging — staging server\n"
-    "/stats — sparkline stats for last 7 days\n"
+    "/analytics — analytics server (metabase)\n"
+    "/fundraisers — сервер Сборов (только владельцу)\n"
+    "/stats — sparkline stats for last 7 days (только владельцу)\n"
     "/help — show this message"
 )
 
@@ -83,6 +97,9 @@ def shorten_name(name: str) -> str:
         "dobrofon-production": "dobrofon",
         "admin-frontend-production-app": "admin-frontend",
         "redis-production": "redis",
+        "fundraisers-backend": "backend",
+        "fundraisers-celery": "celery",
+        "user@1001": "docker (rootless)",
     }
     return replacements.get(name, name)
 
@@ -386,12 +403,32 @@ def _stats_for_server(server: str) -> str:
     return "\n".join(lines)
 
 
+async def _filter_sustained_cpu(name, url, alerts):
+    # CPU alerts fire only if the spike persists ~3 min (skip transient
+    # spikes: mass pushes, apt release checks). Other alerts stay immediate.
+    cpu_alerts = [a for a in alerts if a.startswith("CPU:")]
+    if not cpu_alerts:
+        return alerts
+    others = [a for a in alerts if not a.startswith("CPU:")]
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+        for _ in range(3):
+            await asyncio.sleep(60)
+            d = await fetch_server_data(session, url)
+            c = _extract_pct(d.get("cpu", d.get("load", ""))) if d else None
+            if c is None or c < 70:
+                logging.info(f"{name}: CPU spike not sustained 3m, suppressed")
+                return others
+    return others + cpu_alerts
+
+
 async def run_health_check(bot: Bot) -> None:
     all_servers = [
         ("Prod", _with_token(PROD_URL, PROD_TOKEN)),
         ("Services", SERVICES_URL),
         ("Monitoring", _with_token(MONITORING_URL, MONITORING_TOKEN)),
         ("Staging", _with_token(STAGING_URL, STAGING_TOKEN)),
+        ("Analytics", ANALYTICS_URL),
+        ("Fundraisers", _with_token(FUNDRAISERS_URL, FUNDRAISERS_TOKEN)),
     ]
 
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
@@ -401,15 +438,22 @@ async def run_health_check(bot: Bot) -> None:
         ])
 
     alert_lines = []
-    for (name, _), data in zip(all_servers, results):
+    owner_alert_lines = []
+    for (name, url), data in zip(all_servers, results):
         if data is None:
             continue
         await asyncio.to_thread(save_snapshot, name, data)
         if name in last_state:
             alerts = detect_alerts(name, last_state[name], data)
             if alerts:
+                alerts = await _filter_sustained_cpu(name, url, alerts)
+            if alerts:
                 block = f"🚨 ALERT: {name} Server\n" + "\n".join(alerts)
-                alert_lines.append(block)
+                # алерты Сборов идут в личку владельцу, а не в общий чат
+                if name == "Fundraisers":
+                    owner_alert_lines.append(block)
+                else:
+                    alert_lines.append(block)
         last_state[name] = data
 
     if alert_lines and ALERT_CHAT_ID:
@@ -420,6 +464,15 @@ async def run_health_check(bot: Bot) -> None:
             )
         except Exception as e:
             logging.warning(f"Failed to send alert: {e}")
+
+    if owner_alert_lines and OWNER_ID:
+        try:
+            await bot.send_message(
+                chat_id=OWNER_ID,
+                text="\n\n".join(owner_alert_lines),
+            )
+        except Exception as e:
+            logging.warning(f"Failed to send owner alert: {e}")
 
 
 async def monitoring_loop(bot: Bot) -> None:
@@ -455,6 +508,21 @@ async def cmd_staging(message: Message):
         await message.reply(await fetch_server(session, "Staging", _with_token(STAGING_URL, STAGING_TOKEN)), parse_mode=ParseMode.HTML)
 
 
+@dp.message(Command(commands=["analytics"]))
+async def cmd_analytics(message: Message):
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+        await message.reply(await fetch_server(session, "Analytics", ANALYTICS_URL), parse_mode=ParseMode.HTML)
+
+
+@dp.message(Command(commands=["fundraisers"]))
+async def cmd_fundraisers(message: Message):
+    if not is_owner(message):
+        await message.reply(NOT_ALLOWED)
+        return
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+        await message.reply(await fetch_server(session, "Fundraisers", _with_token(FUNDRAISERS_URL, FUNDRAISERS_TOKEN)), parse_mode=ParseMode.HTML)
+
+
 @dp.message(Command(commands=["health"]))
 async def get_health(message: Message):
     all_servers = [
@@ -462,7 +530,12 @@ async def get_health(message: Message):
         ("Services", SERVICES_URL, "services"),
         ("Monitoring", _with_token(MONITORING_URL, MONITORING_TOKEN), "monitoring"),
         ("Staging", _with_token(STAGING_URL, STAGING_TOKEN), "staging"),
+        ("Analytics", ANALYTICS_URL, "analytics"),
     ]
+    if is_owner(message):
+        all_servers.append(
+            ("Fundraisers", _with_token(FUNDRAISERS_URL, FUNDRAISERS_TOKEN), "fundraisers")
+        )
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
         try:
             blocks = await asyncio.gather(*[
@@ -476,7 +549,10 @@ async def get_health(message: Message):
 
 @dp.message(Command(commands=["stats"]))
 async def cmd_stats(message: Message):
-    servers = ["Prod", "Services", "Monitoring", "Staging"]
+    if not is_owner(message):
+        await message.reply(NOT_ALLOWED)
+        return
+    servers = ["Prod", "Services", "Monitoring", "Staging", "Analytics", "Fundraisers"]
     blocks = await asyncio.gather(*[
         asyncio.to_thread(_stats_for_server, s) for s in servers
     ])
